@@ -4,10 +4,13 @@ Package oakratelimiter protects API endpoints with rate limiting middleware.
 package oakratelimiter
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
 	"log/slog"
+
+	"github.com/dkotik/oakratelimiter/rate"
 )
 
 type Error interface {
@@ -20,25 +23,20 @@ type Handler interface {
 
 type HandlerFunc func(http.ResponseWriter, *http.Request) error
 
+type Middleware func(Handler) Handler
+
 func (f HandlerFunc) ServeHyperText(w http.ResponseWriter, r *http.Request) error {
 	return f(w, r)
 }
 
-type ErrorHandler func(http.ResponseWriter, *http.Request, error)
-
-type EndpointAccessControl interface {
-	IsAllowed(*http.Request) (bool, error)
+type RequestHandler struct {
+	next            Handler
+	headerWriter    HeaderWriter
+	names           []string
+	requestLimiters []rate.RequestLimiter
 }
 
-type Middleware struct {
-	next         Handler
-	headerWriter HeaderWriter
-	names        []string
-	rateLimiters []RequestLimiter
-	errorHandler ErrorHandler
-}
-
-func (o *Middleware) ServeHyperText(
+func (rh *RequestHandler) ServeHyperText(
 	w http.ResponseWriter, r *http.Request,
 ) (err error) {
 	header := w.Header()
@@ -46,33 +44,51 @@ func (o *Middleware) ServeHyperText(
 	remaining := float64(0)
 	ok := false
 	leastRemaining := float64(99999999)
-	for i, limiter := range o.rateLimiters {
+	for i, limiter := range rh.requestLimiters {
 		remaining, ok, err = limiter.Take(r)
 		if leastRemaining > remaining {
 			leastRemaining = remaining
 		}
 		if err != nil {
-			o.headerWriter.ReportError(header)
-			return fmt.Errorf("rate limiter %q failed: %w", o.names[i], err)
+			rh.headerWriter.ReportError(header)
+			return fmt.Errorf("rate limiter %q failed: %w", rh.names[i], err)
 		}
 		if !ok {
-			rejected = append(rejected, o.names[i])
+			rejected = append(rejected, rh.names[i])
 		}
 	}
 	if len(rejected) > 0 {
-		o.headerWriter.ReportAccessDenied(header, leastRemaining)
+		rh.headerWriter.ReportAccessDenied(header, leastRemaining)
 		return &TooManyRequestsError{
 			rejectedEndpointAccessControlNames: rejected,
 		}
 	}
-	o.headerWriter.ReportAccessAllowed(header, leastRemaining)
-	return o.next.ServeHyperText(w, r)
+	rh.headerWriter.ReportAccessAllowed(header, leastRemaining)
+	return rh.next.ServeHyperText(w, r)
 }
 
-func (o *Middleware) ServeHTTP(
+func (rh *RequestHandler) ServeHTTP(
 	w http.ResponseWriter, r *http.Request,
 ) {
-	o.errorHandler(w, r, o.ServeHyperText(w, r))
+	err := rh.ServeHyperText(w, r)
+	var httpError Error
+	if errors.As(err, &httpError) {
+		msg := err.Error()
+		http.Error(w, msg, httpError.HyperTextStatusCode())
+		slog.Log(
+			r.Context(),
+			slog.LevelError,
+			msg,
+			slog.Any("error", httpError),
+		)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusInternalServerError)
+	slog.Log(
+		r.Context(),
+		slog.LevelError,
+		err.Error(),
+	)
 }
 
 // TooManyRequestsError indicates overflowing request [Rate].
@@ -96,6 +112,39 @@ func (e *TooManyRequestsError) LogValue() slog.Value {
 		slog.String("error", e.Error()),
 		slog.Any("rejected_by", e.rejectedEndpointAccessControlNames),
 	)
+}
+
+func New(next Handler, withOptions ...Option) (*RequestHandler, error) {
+	o, err := newOptions(withOptions)
+	if err != nil {
+		return nil, fmt.Errorf("cannot initialize Oak rate limiter: %w", err)
+	}
+
+	return &RequestHandler{
+		next:            next,
+		headerWriter:    o.headerWriter,
+		names:           o.names,
+		requestLimiters: o.requestLimiters,
+	}, nil
+}
+
+func NewMiddleware(withOptions ...Option) (Middleware, error) {
+	o, err := newOptions(withOptions)
+	if err != nil {
+		return nil, fmt.Errorf("cannot initialize Oak rate limiting middleware: %w", err)
+	}
+
+	return func(next Handler) Handler {
+		if next == nil {
+			panic(fmt.Errorf("cannot use a %q handler", next))
+		}
+		return &RequestHandler{
+			next:            next,
+			headerWriter:    o.headerWriter,
+			names:           o.names,
+			requestLimiters: o.requestLimiters,
+		}
+	}, nil
 }
 
 // New creates an [Middleware] from either [Basic], [SingleTagging], or [MultiTagging] rate limiters. The selection is based on the [Option]s provided. If the option set contains no request [Tagger]s, [Basic] middleware is returned. If one [Tagger], then [SingleTagging]. If more than one [Tagger], then [MultiTagging]. This function is able to instrument a performant [RateLimiter] for most practical cases.

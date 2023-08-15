@@ -1,5 +1,5 @@
 /*
-Package mutexrlm provides [oakratelimiter.RateLimiter]s that use memory stores with [sync.Mutex] for safe concurrency. This strategy is optimal for simple single-instance rate limiting.
+Package mutexrlm provides [rate.Limiter]s that use memory stores with [sync.Mutex] for safe concurrency. This strategy is optimal for simple single-instance rate limiting.
 */
 package mutexrlm
 
@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dkotik/oakratelimiter"
+	"github.com/dkotik/oakratelimiter/rate"
 )
 
 // bucket tracks remaining tokens and limit expiration.
@@ -23,8 +23,8 @@ func (b *bucket) Expires(at time.Time) bool {
 	return b.expires.Before(at)
 }
 
-// Take removes one token from the bucket. If the bucket is fresh, some fractional amount of tokens is also replenished according to [oakratelimiter.Rate] over the transpired time since the previous take from the bucket. Must run inside mutex lock.
-func (b *bucket) Take(limit float64, r oakratelimiter.Rate, from, to time.Time) bool {
+// Take removes one token from the bucket. If the bucket is fresh, some fractional amount of tokens is also replenished according to [rate.Rate] over the transpired time since the previous take from the bucket. Must run inside mutex lock.
+func (b *bucket) Take(limit float64, r rate.Rate, from, to time.Time) bool {
 	if b.Expires(from) { // reset
 		b.tokens = limit - 1
 		b.expires = to
@@ -46,7 +46,7 @@ func (b *bucket) Take(limit float64, r oakratelimiter.Rate, from, to time.Time) 
 type bucketMap map[string]*bucket
 
 // Take locates the proper [bucket] by tag and takes one token from it. If the bucket does not exist, a new one is added to the [bucketMap]. Must run inside mutex lock.
-func (m bucketMap) Take(tag string, limit float64, r oakratelimiter.Rate, from, to time.Time) bool {
+func (m bucketMap) Take(tag string, limit float64, r rate.Rate, from, to time.Time) bool {
 	foundBucket, ok := m[tag]
 	if !ok {
 		foundBucket = &bucket{
@@ -72,7 +72,7 @@ func (m bucketMap) Purge(to time.Time) {
 type taggedBucketMap struct {
 	name      string
 	interval  time.Duration
-	rate      oakratelimiter.Rate
+	rate      rate.Rate
 	limit     float64
 	bucketMap bucketMap
 	tagger    Tagger

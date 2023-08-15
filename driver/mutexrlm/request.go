@@ -4,13 +4,15 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/dkotik/oakratelimiter/rate"
 )
 
 // Basic rate limiter enforces the limit using one leaky token bucket.
 type Basic struct {
 	failure  error
 	interval time.Duration
-	rate     Rate
+	rate     rate.Rate
 	limit    float64
 
 	mu sync.Mutex

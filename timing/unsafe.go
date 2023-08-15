@@ -13,21 +13,22 @@ type unsafeRandomSource struct {
 	d int64
 }
 
+// UnsafeRandomSourceOption provides configuration for [NewUnsafeRandomSource].
 type UnsafeRandomSourceOption func(*unsafeRandomSource) error
 
 func (u *unsafeRandomSource) GetDeviation() (time.Duration, error) {
 	return time.Duration(u.b + u.r.Int63n(u.d)), nil
 }
 
-func NewUnsafeRandomSource(withOptions ...UnsafeRandomSourceOption) (urs Source, err error) {
+func NewUnsafeRandomSource(withOptions ...UnsafeRandomSourceOption) (urs *unsafeRandomSource, err error) {
 	urs = &unsafeRandomSource{}
 	for _, option := range append(
 		withOptions,
 		WithDefaultUnsafeRandomSource(),
-    WithDefaultUnsafeRandomSourceDeviation(),
+		WithDefaultUnsafeRandomSourceDeviation(),
 	) {
 		if err = option(urs); err != nil {
-			return fmt.Errorf("cannot initialize unsafe random source: %w", err)
+			return nil, fmt.Errorf("cannot initialize unsafe random source: %w", err)
 		}
 	}
 	return urs, nil
@@ -38,10 +39,10 @@ func WithUnsafeRandom(r *rand.Rand) UnsafeRandomSourceOption {
 		if r == nil {
 			return errors.New("cannot use a <nil> random number generator")
 		}
-		if u.rand != nil {
+		if u.r != nil {
 			return errors.New("random number generator is already set")
 		}
-		u.rand = r
+		u.r = r
 		return nil
 	}
 }
@@ -56,14 +57,14 @@ func WithUnsafeRandomSource(s rand.Source) UnsafeRandomSourceOption {
 }
 
 func WithDefaultUnsafeRandomSource() UnsafeRandomSourceOption {
-  return func(u *unsafeRandomSource) error {
-    if u.rand != nil {
-      return nil // already set
-    }
-    return WithUnsafeRandomSource(rand.New(rand.NewSource(
-      time.Now().UnixNano(),
-    )))(u)
-  }
+	return func(u *unsafeRandomSource) error {
+		if u.r != nil {
+			return nil // already set
+		}
+		return WithUnsafeRandomSource(rand.New(rand.NewSource(
+			time.Now().UnixNano(),
+		)))(u)
+	}
 }
 
 func WithUnsafeRandomSourceDeviation(d time.Duration) UnsafeRandomSourceOption {
@@ -80,19 +81,19 @@ func WithUnsafeRandomSourceDeviation(d time.Duration) UnsafeRandomSourceOption {
 }
 
 func WithDefaultUnsafeRandomSourceDeviation() UnsafeRandomSourceOption {
-  return func(u *unsafeRandomSource) error {
-    if u.d != 0 {
-      return nil // already set
-    }
-    return WithUnsafeRandomSourceDeviation(MinimumDeviation)(u)
-  }
+	return func(u *unsafeRandomSource) error {
+		if u.d != 0 {
+			return nil // already set
+		}
+		return WithUnsafeRandomSourceDeviation(MinimumDeviation)(u)
+	}
 }
 
 func WithUnsafeRandomSourceBase(d time.Duration) UnsafeRandomSourceOption {
 	return func(u *unsafeRandomSource) error {
-    if d = 0 {
-      return errors.New("cannot use a zero base deviation")
-    }
+		if d == 0 {
+			return errors.New("cannot use a zero base deviation")
+		}
 		if d < 0 {
 			return fmt.Errorf("base deviation of %d is less than zero", d)
 		}

@@ -1,4 +1,4 @@
-package oakratelimiter
+package test
 
 import (
 	"io"

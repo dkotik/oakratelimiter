@@ -1,4 +1,4 @@
-package oakratelimiter
+package mutexrlm
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/dkotik/oakratelimiter/rate"
 )
 
 // SingleTagging is a faster version of [MultiTagging] for situations
@@ -14,7 +16,7 @@ import (
 type SingleTagging struct {
 	failure  error
 	interval time.Duration
-	rate     Rate
+	rate     rate.Rate
 	limit    float64
 
 	mu sync.Mutex
@@ -55,8 +57,8 @@ func NewSingleTagging(withOptions ...Option) (*SingleTagging, error) {
 	return s, nil
 }
 
-// Rate returns discriminating [Rate] or global [Rate], whichever is slower.
-func (d *SingleTagging) Rate() Rate {
+// Rate returns discriminating [rate.Rate] or global [rate.Rate], whichever is slower.
+func (d *SingleTagging) Rate() rate.Rate {
 	if d.taggedBucketMap.rate < d.rate {
 		return d.taggedBucketMap.rate
 	}
@@ -101,7 +103,7 @@ func (d *SingleTagging) purgeLoop(ctx context.Context, interval time.Duration) {
 type MultiTagging struct {
 	failure  error
 	interval time.Duration
-	rate     Rate
+	rate     rate.Rate
 	limit    float64
 
 	mu sync.Mutex
@@ -142,8 +144,8 @@ func NewMultiTagging(withOptions ...Option) (*MultiTagging, error) {
 	return m, nil
 }
 
-// Rate returns discriminating [Rate] or global [Rate], whichever is slower.
-func (d *MultiTagging) Rate() (r Rate) {
+// Rate returns discriminating [rate.Rate] or global [rate.Rate], whichever is slower.
+func (d *MultiTagging) Rate() (r rate.Rate) {
 	r = d.rate
 	for _, child := range d.taggedBucketMaps {
 		if child.rate < r {

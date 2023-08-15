@@ -1,4 +1,4 @@
-package oakratelimiter
+package mutexrlm
 
 import (
 	"context"

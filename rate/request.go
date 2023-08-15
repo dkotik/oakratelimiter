@@ -1,4 +1,4 @@
-package oakratelimiter
+package rate
 
 import (
 	"errors"
@@ -19,11 +19,10 @@ type RequestLimiter interface {
 // Tagger associates tags to [http.Request]s in order to
 // group related requests for a discriminating rate limiter.
 // Requests with the same association tag will be tracked
-// together by the [RateLimiter]. Return [SkipTagger]
-// sentinel value to disregard the [http.Request].
+// together by the [Limiter].
 type Tagger func(*http.Request) (string, error)
 
-func NewRequestLimiter(t Tagger, l RateLimiter) (RequestLimiter, error) {
+func NewRequestLimiter(t Tagger, l Limiter) (RequestLimiter, error) {
 	if t == nil {
 		return nil, errors.New("cannot use a <nil> tagger")
 	}
@@ -38,7 +37,7 @@ func NewRequestLimiter(t Tagger, l RateLimiter) (RequestLimiter, error) {
 
 type taggingRequestLimiter struct {
 	tagger  Tagger
-	limiter RateLimiter
+	limiter Limiter
 }
 
 func (t *taggingRequestLimiter) Rate() Rate {

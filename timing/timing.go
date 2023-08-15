@@ -3,16 +3,25 @@ Package timing provides request modulation middleware that mitigates timing atta
 */
 package timing
 
-import "time
+import (
+	"crypto/rand"
+	"fmt"
+	"io"
+	"math/big"
+	"net/http"
+	"time"
+
+	"github.com/dkotik/oakratelimiter"
+)
 
 const MinimumDeviation = time.Millisecond
 
 type Source interface {
-  GetDeviation() (time.Duration, error)
+	GetDeviation() (time.Duration, error)
 }
 
 type randomModulator struct {
-	next   oakrateLimiter.Handler
+	next   oakratelimiter.Handler
 	source Source
 }
 
@@ -30,7 +39,7 @@ func (rm *randomModulator) ServeHyperText(
 	r *http.Request,
 ) error {
 	ctx := r.Context()
-	wait, err := rm.source()
+	wait, err := rm.source.GetDeviation()
 	if err != nil {
 		return err
 	}
@@ -43,42 +52,42 @@ func (rm *randomModulator) ServeHyperText(
 }
 
 type RandomSource struct {
-  r io.Reader
-  d big.Int
-  b big.Int
+	r io.Reader
+	d *big.Int
+	b *big.Int
 }
 
 func (r *RandomSource) GetDeviation() (time.Duration, error) {
-  d, err := rand.Int(r.r, r.d)
-  if err != nil {
-    return 0, err
-  }
-	return time.Duration(r.b + d), nil
+	d, err := rand.Int(r.r, r.d)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(r.b.Add(r.b, d).Int64()), nil
 }
 
 func NewSource(withOptions ...Option) (_ Source, err error) {
 	o := &options{}
-  for _, option := range append(
-    withOptions,
-    WithDefaultRandomByteSource(),
-    WithDefaultRandomDeviationLimit(),
-  ) {
-    if err = option(o); err != nil {
-      return nil, fmt.Errorf("unable to initiate timing modulator source: %w", err)
-    }
-  }
+	for _, option := range append(
+		withOptions,
+		WithDefaultRandomByteSource(),
+		WithDefaultRandomDeviationLimit(),
+	) {
+		if err = option(o); err != nil {
+			return nil, fmt.Errorf("unable to initiate timing modulator source: %w", err)
+		}
+	}
 
 	return &RandomSource{
-    r: o.r,
-    d: big.NewInt(o.d),
-    b: big.NewInt(o.b),
-  }, nil
+		r: o.r,
+		d: big.NewInt(int64(o.d)),
+		b: big.NewInt(int64(o.b)),
+	}, nil
 }
 
 func NewTimingModulator(withOptions ...Option) (oakratelimiter.Middleware, error) {
-  source, err := NewSource(withOptions...)
-  if err != nil {
-    return nil, err
-  }
-	return NewMiddleware(source), nil
+	source, err := NewSource(withOptions...)
+	if err != nil {
+		return nil, err
+	}
+	return NewMiddleware(source)
 }

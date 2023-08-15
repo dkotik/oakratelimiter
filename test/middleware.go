@@ -13,27 +13,19 @@ import (
 	"time"
 
 	"github.com/dkotik/oakratelimiter"
+	"github.com/dkotik/oakratelimiter/rate"
 )
-
-// RequestFactory generates new requests for load testing rate limiting middleware. Use together with [MiddlewareLoadTest].
-type RequestFactory func(context.Context) *http.Request
-
-// GetRequestFactory is the simplest request factory with no payload.
-func GetRequestFactory(ctx context.Context) *http.Request {
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	return r.WithContext(ctx)
-}
 
 // MiddlewareLoadTest runs a stream of requests while [context.Context] is active against a given rate limiting [Middleware]. Ensures that the failure rate roughly matches the expected failure rate. Use this helper to build and test your own rate limiting middlewares.
 func MiddlewareLoadTest(
 	ctx context.Context,
 	m func(oakratelimiter.Handler) oakratelimiter.Handler,
-	r oakratelimiter.Rate,
+	r rate.Rate,
 	rf RequestFactory,
 	expectedRejectionRate float64,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
-		handler := m(HandlerFunc(func(w http.ResponseWriter, r *http.Request) (err error) {
+		handler := m(oakratelimiter.HandlerFunc(func(w http.ResponseWriter, r *http.Request) (err error) {
 			_, err = io.WriteString(w, "hello world")
 			return err
 		}))

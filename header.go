@@ -1,9 +1,16 @@
 package oakratelimiter
 
 import (
+	"fmt"
+	"math"
 	"net/http"
 	"time"
+
+	"github.com/dkotik/oakratelimiter/rate"
 )
+
+var _ HeaderWriter = (*SilentHeaderWriter)(nil)
+var _ HeaderWriter = (*ObfuscatingHeaderWriter)(nil)
 
 type HeaderWriter interface {
 	ReportAccessAllowed(header http.Header, tokens float64)
@@ -11,9 +18,34 @@ type HeaderWriter interface {
 	ReportError(header http.Header)
 }
 
+type SilentHeaderWriter struct{}
+
+func (s *SilentHeaderWriter) ReportAccessAllowed(http.Header, float64) {}
+func (s *SilentHeaderWriter) ReportAccessDenied(http.Header, float64)  {}
+func (s *SilentHeaderWriter) ReportError(http.Header)                  {}
+
 type ObfuscatingHeaderWriter struct {
 	oneTokenWindow   time.Duration
 	displayRateLimit string
+}
+
+func NewObfuscatingHeaderWriter(r rate.Rate) HeaderWriter {
+	if r == rate.Zero {
+		return &SilentHeaderWriter{}
+	}
+	limit := uint(1)
+	oneTokenWindow := time.Nanosecond * time.Duration(1.05/r)
+	if oneTokenWindow < time.Second {
+		limit = uint(math.Min(
+			math.Floor(float64(time.Second.Nanoseconds())*float64(r*0.95)),
+			1,
+		))
+		oneTokenWindow = time.Second
+	}
+	return &ObfuscatingHeaderWriter{
+		oneTokenWindow:   oneTokenWindow,
+		displayRateLimit: fmt.Sprintf("%d", limit),
+	}
 }
 
 func (o *ObfuscatingHeaderWriter) ReportAccessAllowed(
