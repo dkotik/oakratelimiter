@@ -5,12 +5,13 @@ import (
 	"fmt"
 
 	"github.com/dkotik/oakratelimiter/rate"
+	"github.com/dkotik/oakratelimiter/request"
 )
 
 type options struct {
 	headerWriter    HeaderWriter
 	names           []string
-	requestLimiters []rate.RequestLimiter
+	requestLimiters []request.Limiter
 }
 
 func newOptions(from []Option) (o *options, err error) {
@@ -24,12 +25,12 @@ func newOptions(from []Option) (o *options, err error) {
 			if len(o.names) == 0 || len(o.requestLimiters) == 0 {
 				return errors.New("at least one request limiter is required")
 			}
-			var least rate.Rate
+			var least *rate.Rate
 			for _, l := range o.requestLimiters {
-				if least == 0 {
+				if least == nil {
 					least = l.Rate()
 				}
-				if current := l.Rate(); current < least {
+				if current := l.Rate(); current.FasterThan(least) {
 					least = current
 				}
 			}
@@ -52,16 +53,16 @@ func (o *options) isAvailable(name string) error {
 	return nil
 }
 
-func (o *options) prepend(name string, l rate.RequestLimiter) error {
+func (o *options) prepend(name string, l request.Limiter) error {
 	if err := o.isAvailable(name); err != nil {
 		return err
 	}
 	o.names = append([]string{name}, o.names...)
-	o.requestLimiters = append([]rate.RequestLimiter{l}, o.requestLimiters...)
+	o.requestLimiters = append([]request.Limiter{l}, o.requestLimiters...)
 	return nil
 }
 
-func (o *options) append(name string, l rate.RequestLimiter) error {
+func (o *options) append(name string, l request.Limiter) error {
 	if err := o.isAvailable(name); err != nil {
 		return err
 	}
@@ -86,7 +87,7 @@ func WithHeaderWriter(h HeaderWriter) Option {
 	}
 }
 
-func WithGlobalRequestLimiter(l rate.RequestLimiter) Option {
+func WithGlobalRequestLimiter(l request.Limiter) Option {
 	return func(o *options) (err error) {
 		if l == nil {
 			return fmt.Errorf("cannot use a %q global request limiter", l)
@@ -108,7 +109,7 @@ func WithGlobalRequestLimiter(l rate.RequestLimiter) Option {
 // use mutexrlm.Basic to enforce
 // func WithGlobalRateLimit(r Rate) Option {}
 
-func WithRequestLimiter(name string, rl rate.RequestLimiter) Option {
+func WithRequestLimiter(name string, rl request.Limiter) Option {
 	return func(o *options) (err error) {
 		if rl == nil {
 			return errors.New("cannot use a <nil> request limiter")
@@ -120,7 +121,7 @@ func WithRequestLimiter(name string, rl rate.RequestLimiter) Option {
 // WithIPAddressTagger configures rate limiter to track requests based on client IP addresses.
 func WithIPAddressTagger(rl rate.Limiter) Option {
 	return func(o *options) (err error) {
-		requestLimiter, err := rate.NewRequestLimiter(NewIPAddressTagger(), rl)
+		requestLimiter, err := request.NewLimiter(request.NewIPAddressTagger(), rl)
 		if err != nil {
 			return err
 		}
@@ -134,9 +135,9 @@ func WithIPAddressTagger(rl rate.Limiter) Option {
 // WithCookieTagger configures rate limiter to track requests based on a certain cookie.
 func WithCookieTagger(name string, rl rate.Limiter) Option {
 	return func(o *options) (err error) {
-		requestLimiter, err := rate.NewRequestLimiter(
+		requestLimiter, err := request.NewLimiter(
 			// If [noCookieValue] is an empty string, this [Tagger] issues a [SkipTagger] sentinel value.
-			NewCookieTagger(name, ""),
+			request.NewCookieTagger(name, ""),
 			rl,
 		)
 		if err != nil {

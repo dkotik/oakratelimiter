@@ -1,12 +1,17 @@
-package rate
+/*
+Package request defines and implements [Limiter] and [Tagger] for throttling [http.Request]s.
+*/
+package request
 
 import (
 	"errors"
 	"net/http"
+
+	"github.com/dkotik/oakratelimiter/rate"
 )
 
-type RequestLimiter interface {
-	Rate() Rate
+type Limiter interface {
+	Rate() *rate.Rate
 	Take(
 		*http.Request,
 	) (
@@ -16,13 +21,7 @@ type RequestLimiter interface {
 	)
 }
 
-// Tagger associates tags to [http.Request]s in order to
-// group related requests for a discriminating rate limiter.
-// Requests with the same association tag will be tracked
-// together by the [Limiter].
-type Tagger func(*http.Request) (string, error)
-
-func NewRequestLimiter(t Tagger, l Limiter) (RequestLimiter, error) {
+func NewLimiter(t Tagger, l rate.Limiter) (Limiter, error) {
 	if t == nil {
 		return nil, errors.New("cannot use a <nil> tagger")
 	}
@@ -37,10 +36,10 @@ func NewRequestLimiter(t Tagger, l Limiter) (RequestLimiter, error) {
 
 type taggingRequestLimiter struct {
 	tagger  Tagger
-	limiter Limiter
+	limiter rate.Limiter
 }
 
-func (t *taggingRequestLimiter) Rate() Rate {
+func (t *taggingRequestLimiter) Rate() *rate.Rate {
 	return t.limiter.Rate()
 }
 

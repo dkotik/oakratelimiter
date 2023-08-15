@@ -4,13 +4,10 @@ Package oakratelimiter protects API endpoints with rate limiting middleware.
 package oakratelimiter
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
 	"log/slog"
-
-	"github.com/dkotik/oakratelimiter/rate"
 )
 
 type Error interface {
@@ -27,68 +24,6 @@ type Middleware func(Handler) Handler
 
 func (f HandlerFunc) ServeHyperText(w http.ResponseWriter, r *http.Request) error {
 	return f(w, r)
-}
-
-type RequestHandler struct {
-	next            Handler
-	headerWriter    HeaderWriter
-	names           []string
-	requestLimiters []rate.RequestLimiter
-}
-
-func (rh *RequestHandler) ServeHyperText(
-	w http.ResponseWriter, r *http.Request,
-) (err error) {
-	header := w.Header()
-	rejected := []string{}
-	remaining := float64(0)
-	ok := false
-	leastRemaining := float64(99999999)
-	for i, limiter := range rh.requestLimiters {
-		remaining, ok, err = limiter.Take(r)
-		if leastRemaining > remaining {
-			leastRemaining = remaining
-		}
-		if err != nil {
-			rh.headerWriter.ReportError(header)
-			return fmt.Errorf("rate limiter %q failed: %w", rh.names[i], err)
-		}
-		if !ok {
-			rejected = append(rejected, rh.names[i])
-		}
-	}
-	if len(rejected) > 0 {
-		rh.headerWriter.ReportAccessDenied(header, leastRemaining)
-		return &TooManyRequestsError{
-			rejectedEndpointAccessControlNames: rejected,
-		}
-	}
-	rh.headerWriter.ReportAccessAllowed(header, leastRemaining)
-	return rh.next.ServeHyperText(w, r)
-}
-
-func (rh *RequestHandler) ServeHTTP(
-	w http.ResponseWriter, r *http.Request,
-) {
-	err := rh.ServeHyperText(w, r)
-	var httpError Error
-	if errors.As(err, &httpError) {
-		msg := err.Error()
-		http.Error(w, msg, httpError.HyperTextStatusCode())
-		slog.Log(
-			r.Context(),
-			slog.LevelError,
-			msg,
-			slog.Any("error", httpError),
-		)
-		return
-	}
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-	slog.Log(
-		r.Context(),
-		slog.LevelError,
-		err.Error(),
-	)
 }
 
 // TooManyRequestsError indicates overflowing request [Rate].

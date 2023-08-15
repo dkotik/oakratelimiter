@@ -20,7 +20,7 @@ import (
 func MiddlewareLoadTest(
 	ctx context.Context,
 	m func(oakratelimiter.Handler) oakratelimiter.Handler,
-	r rate.Rate,
+	r *rate.Rate,
 	rf RequestFactory,
 	expectedRejectionRate float64,
 ) func(t *testing.T) {
@@ -37,7 +37,7 @@ func MiddlewareLoadTest(
 
 		go func(ctx context.Context, requests chan<- *http.Request) {
 			// generate requests
-			oneTokenWindow := time.Nanosecond * time.Duration(1/r)
+			oneTokenWindow := time.Nanosecond * time.Duration(1/r.PerNanosecond())
 			ticker := time.NewTicker(oneTokenWindow)
 			defer ticker.Stop()
 

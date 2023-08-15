@@ -29,15 +29,13 @@ type ObfuscatingHeaderWriter struct {
 	displayRateLimit string
 }
 
-func NewObfuscatingHeaderWriter(r rate.Rate) HeaderWriter {
-	if r == rate.Zero {
-		return &SilentHeaderWriter{}
-	}
+func NewObfuscatingHeaderWriter(r *rate.Rate) HeaderWriter {
 	limit := uint(1)
-	oneTokenWindow := time.Nanosecond * time.Duration(1.05/r)
+	perNano := r.PerNanosecond()
+	oneTokenWindow := time.Nanosecond * time.Duration(1.05/perNano)
 	if oneTokenWindow < time.Second {
 		limit = uint(math.Min(
-			math.Floor(float64(time.Second.Nanoseconds())*float64(r*0.95)),
+			math.Floor(float64(time.Second.Nanoseconds())*float64(perNano*0.95)),
 			1,
 		))
 		oneTokenWindow = time.Second

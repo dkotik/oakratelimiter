@@ -1,0 +1,64 @@
+package rate
+
+import "time"
+
+type LeakyBucket struct {
+	touched time.Time
+	tokens  float64
+}
+
+func NewLeakyBucket(at time.Time, r *Rate, burstLimit float64) *LeakyBucket {
+	b := &LeakyBucket{}
+	b.Refill(at, r, burstLimit)
+	return b
+}
+
+func (l *LeakyBucket) Touched() time.Time {
+	return l.touched
+}
+
+func (l *LeakyBucket) Refill(at time.Time, r *Rate, burstLimit float64) {
+	l.tokens = r.ReplenishedTokens(l.touched, at)
+	if l.tokens > burstLimit {
+		l.tokens = burstLimit
+	}
+	l.touched = at
+}
+
+func (l *LeakyBucket) Take(tokens float64) (remaining float64, ok bool) {
+	if l.tokens < tokens {
+		return l.tokens, false
+	}
+	l.tokens -= tokens
+	return l.tokens, true
+}
+
+// // bucket tracks remaining tokens and limit expiration.
+// type bucket struct {
+// 	expires time.Time
+// 	tokens  float64
+// }
+//
+// // Expires returns true if the bucket is expired at given [time.Time].
+// func (b *bucket) Expires(at time.Time) bool {
+// 	return b.expires.Before(at)
+// }
+//
+// // Take removes one token from the bucket. If the bucket is fresh, some fractional amount of tokens is also replenished according to [rate.Rate] over the transpired time since the previous take from the bucket. Must run inside mutex lock.
+// func (b *bucket) Take(limit float64, r rate.Rate, from, to time.Time) bool {
+// 	if b.Expires(from) { // reset
+// 		b.tokens = limit - 1
+// 		b.expires = to
+// 		return true
+// 	}
+//
+// 	replenished := b.tokens + r.ReplenishedTokens(b.expires, to)
+// 	b.expires = to
+// 	if replenished < 1 { // nothing to take
+// 		b.tokens = replenished
+// 		return false
+// 	}
+//
+// 	b.tokens = replenished - 1
+// 	return true
+// }
