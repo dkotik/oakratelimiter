@@ -33,6 +33,16 @@ func WithRate(r *rate.Rate) Option {
 	}
 }
 
+func WithNewRate(limit float64, interval time.Duration) Option {
+	return func(o *options) error {
+		rate, err := rate.New(limit, interval)
+		if err != nil {
+			return fmt.Errorf("cannot use new rate: %w", err)
+		}
+		return WithRate(rate)(o)
+	}
+}
+
 func WithBurst(limit float64) Option {
 	return func(o *options) error {
 		if limit <= 0 {
@@ -54,7 +64,7 @@ func WithDefaultBurst() Option {
 		if o.Rate == nil {
 			return errors.New("rate is required")
 		}
-		o.Burst = o.Rate.PerNanosecond()
+		o.Burst = o.Rate.PerNanosecond() * float64(o.Rate.Interval().Nanoseconds())
 		return nil
 	}
 }

@@ -1,5 +1,21 @@
 package mutexrlm
 
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/dkotik/oakratelimiter/test"
+)
+
+func TestRequestLimiter(t *testing.T) {
+	limiter, err := NewRequestLimiter(WithNewRate(8, time.Second))
+	if err != nil {
+		t.Fatal("cannot initialize request limiter:", err)
+	}
+	test.RequestLimiterTest(context.Background(), limiter, 8)(t)
+}
+
 // func TestBasicMiddleware(t *testing.T) {
 // 	limit := float64(2)
 // 	interval := time.Millisecond * 20

@@ -2,11 +2,13 @@ package rate
 
 import "time"
 
+// LeakyBucket keeps track of available tokens according to a given [Rate].
 type LeakyBucket struct {
 	touched time.Time
 	tokens  float64
 }
 
+// NewLeakyBucket returns a full [LeakyBucket].
 func NewLeakyBucket(at time.Time, r *Rate, burstLimit float64) *LeakyBucket {
 	b := &LeakyBucket{}
 	b.Refill(at, r, burstLimit)
@@ -18,11 +20,13 @@ func (l *LeakyBucket) Touched() time.Time {
 }
 
 func (l *LeakyBucket) Refill(at time.Time, r *Rate, burstLimit float64) {
-	l.tokens = r.ReplenishedTokens(l.touched, at)
-	if l.tokens > burstLimit {
-		l.tokens = burstLimit
+	if l.tokens < burstLimit {
+		l.tokens = l.tokens + r.ReplenishedTokens(l.touched, at)
+		if l.tokens > burstLimit {
+			l.tokens = burstLimit
+		}
+		l.touched = at
 	}
-	l.touched = at
 }
 
 func (l *LeakyBucket) Take(tokens float64) (remaining float64, ok bool) {

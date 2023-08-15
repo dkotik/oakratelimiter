@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/dkotik/oakratelimiter/driver/mutexrlm"
 	"github.com/dkotik/oakratelimiter/rate"
 	"github.com/dkotik/oakratelimiter/request"
 )
@@ -96,18 +97,25 @@ func WithGlobalRequestLimiter(l request.Limiter) Option {
 	}
 }
 
-// use mutexrlm.Basic to enforce
-// func WithGlobalRateLimiter(rl RateLimiter) Option {
-// 	return func(o *options) (err error) {
-// 		rl, err := NewBlindRequestLimiter(rl)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		return o.append("global", rl)
-// 	}
-// }
-// use mutexrlm.Basic to enforce
-// func WithGlobalRateLimit(r Rate) Option {}
+func WithGlobalRateLimiter(tag string, l rate.Limiter) Option {
+	return func(o *options) (err error) {
+		rl, err := request.NewStaticLimiter(tag, l)
+		if err != nil {
+			return err
+		}
+		return WithGlobalRequestLimiter(rl)(o)
+	}
+}
+
+func WithGlobalRate(r *rate.Rate) Option {
+	return func(o *options) (err error) {
+		rl, err := mutexrlm.NewRequestLimiter(mutexrlm.WithRate(r))
+		if err != nil {
+			return err
+		}
+		return WithGlobalRequestLimiter(rl)(o)
+	}
+}
 
 func WithRequestLimiter(name string, rl request.Limiter) Option {
 	return func(o *options) (err error) {
@@ -132,6 +140,16 @@ func WithIPAddressTagger(rl rate.Limiter) Option {
 	}
 }
 
+func WithIPAddressRate(r *rate.Rate) Option {
+	return func(o *options) (err error) {
+		rl, err := mutexrlm.New(mutexrlm.WithRate(r))
+		if err != nil {
+			return err
+		}
+		return WithIPAddressTagger(rl)(o)
+	}
+}
+
 // WithCookieTagger configures rate limiter to track requests based on a certain cookie.
 func WithCookieTagger(name string, rl rate.Limiter) Option {
 	return func(o *options) (err error) {
@@ -147,5 +165,15 @@ func WithCookieTagger(name string, rl rate.Limiter) Option {
 			"cookie:"+name,
 			requestLimiter,
 		)(o)
+	}
+}
+
+func WithCookieRate(name string, r *rate.Rate) Option {
+	return func(o *options) (err error) {
+		rl, err := mutexrlm.New(mutexrlm.WithRate(r))
+		if err != nil {
+			return err
+		}
+		return WithCookieTagger(name, rl)(o)
 	}
 }

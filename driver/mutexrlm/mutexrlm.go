@@ -5,7 +5,6 @@ package mutexrlm
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -31,7 +30,7 @@ func New(withOptions ...Option) (*RateLimiter, error) {
 		burstLimit: o.Burst,
 		mu:         sync.Mutex{},
 		buckets: make(
-			map[string]rate.LeakyBucket,
+			map[string]*rate.LeakyBucket,
 			o.InitialAllocationSize,
 		),
 	}
@@ -50,7 +49,7 @@ func New(withOptions ...Option) (*RateLimiter, error) {
 		}
 	}(o.CleanupContext, o.CleanupInterval, r)
 
-	return nil, errors.New("impl")
+	return r, nil
 }
 
 type RateLimiter struct {
@@ -58,7 +57,7 @@ type RateLimiter struct {
 	burstLimit float64
 
 	mu      sync.Mutex
-	buckets map[string]rate.LeakyBucket
+	buckets map[string]*rate.LeakyBucket
 }
 
 func (r *RateLimiter) Rate() *rate.Rate {
@@ -82,7 +81,7 @@ func (r *RateLimiter) Take(
 
 	foundBucket, ok := r.buckets[tag]
 	if !ok {
-		foundBucket = *rate.NewLeakyBucket(
+		foundBucket = rate.NewLeakyBucket(
 			t,
 			r.rate,
 			r.burstLimit,

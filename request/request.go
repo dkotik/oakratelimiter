@@ -21,6 +21,36 @@ type Limiter interface {
 	)
 }
 
+func NewStaticLimiter(tag string, l rate.Limiter) (Limiter, error) {
+	if tag == "" {
+		return nil, errors.New("cannot use an empty tag")
+	}
+	if l == nil {
+		return nil, errors.New("cannot use a <nil> rate limiter")
+	}
+	return &staticLimiter{
+		tag:     tag,
+		limiter: l,
+	}, nil
+}
+
+type staticLimiter struct {
+	tag     string
+	limiter rate.Limiter
+}
+
+func (s *staticLimiter) Rate() *rate.Rate {
+	return s.limiter.Rate()
+}
+
+func (s *staticLimiter) Take(r *http.Request) (
+	remaining float64,
+	ok bool,
+	err error,
+) {
+	return s.limiter.Take(r.Context(), s.tag, 1.0)
+}
+
 func NewLimiter(t Tagger, l rate.Limiter) (Limiter, error) {
 	if t == nil {
 		return nil, errors.New("cannot use a <nil> tagger")

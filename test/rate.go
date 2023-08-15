@@ -6,12 +6,6 @@ import (
 	"net/http/httptest"
 )
 
-func floatComparator(errorMargin float64) func(a, b float64) bool {
-	return func(a, b float64) bool {
-		return b > a-errorMargin && b < a+errorMargin
-	}
-}
-
 func captureResponse(h http.Handler, r *http.Request) *http.Response {
 	// req := httptest.NewRequest(http.MethodGet, "/upper?word=abc", nil)
 	w := httptest.NewRecorder()
