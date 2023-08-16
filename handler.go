@@ -61,7 +61,7 @@ func (rh *RequestHandler) ServeHTTP(
 		http.Error(w, msg, httpError.HyperTextStatusCode())
 		slog.Log(
 			r.Context(),
-			slog.LevelError,
+			slog.LevelWarn,
 			msg,
 			slog.Any("error", err),
 		)

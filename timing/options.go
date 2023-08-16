@@ -56,7 +56,7 @@ func WithDefaultRandomDeviationLimit() Option {
 		if o.d != 0 {
 			return nil // already set
 		}
-		return WithRandomDeviationLimit(MinimumDeviation)(o)
+		return WithRandomDeviationLimit(MinimumDeviation * 2)(o)
 	}
 }
 

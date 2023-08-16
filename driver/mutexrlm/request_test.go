@@ -9,7 +9,7 @@ import (
 )
 
 func TestRequestLimiter(t *testing.T) {
-	limiter, err := NewRequestLimiter(WithNewRate(8, time.Second))
+	limiter, err := NewRequestLimiter(WithNewRate(8, time.Millisecond*20))
 	if err != nil {
 		t.Fatal("cannot initialize request limiter:", err)
 	}

@@ -88,6 +88,7 @@ func WithHeaderWriter(h HeaderWriter) Option {
 	}
 }
 
+// WithGlobalRequestLimiter applies [mutexrlm.RequestLimiter] as the top request limiter named "global".
 func WithGlobalRequestLimiter(l request.Limiter) Option {
 	return func(o *options) (err error) {
 		if l == nil {

@@ -5,6 +5,7 @@ package mutexrlm
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -21,7 +22,7 @@ func New(withOptions ...Option) (*RateLimiter, error) {
 		WithDefaultCleanupContext(),
 	) {
 		if err := option(o); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("cannot initialize mutex rate limiter driver: %w", err)
 		}
 	}
 
