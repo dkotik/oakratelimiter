@@ -6,6 +6,7 @@ package postgresrlm
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -20,10 +21,10 @@ type RateLimiter struct {
 	microSecondRate float64
 	burstLimit      float64
 	db              *sql.DB
-	// createStmt   *sql.Stmt
-	// retrieveStmt *sql.Stmt
+	createStmt      *sql.Stmt
+	retrieveStmt    *sql.Stmt
 	// updateStmt   *sql.Stmt
-	upsertStmt  *sql.Stmt
+	// upsertStmt  *sql.Stmt
 	cleanupStmt *sql.Stmt
 }
 
@@ -37,16 +38,26 @@ func New(withOptions ...Option) (r *RateLimiter, err error) {
 		WithDefaultCleanupInterval(),
 		WithDefaultCleanupContext(),
 		func(o *options) (err error) {
+			// _, err = o.Database.Exec(`DROP TABLE IF EXISTS ` + o.Table)
+			// if err != nil {
+			// 	return err
+			// }
 			_, err = o.Database.Exec(`
         CREATE TABLE IF NOT EXISTS
         ` + o.Table + ` (
-          tag varchar(128) NOT NULL PRIMARY KEY,
+          tag varchar(128) NOT NULL,
           touched bigint NOT NULL,
           tokens numeric NOT NULL
         )
       `)
 			if err != nil {
 				return fmt.Errorf("cannot create database table %q: %w", o.Table, err)
+			}
+			_, err = o.Database.Exec(`
+        CREATE INDEX IF NOT EXISTS
+         oakratelimiterTagIndexFor_` + o.Table + ` ON ` + o.Table + `(tag)`)
+			if err != nil {
+				return fmt.Errorf("cannot create database index for table %q: %w", o.Table, err)
 			}
 			return nil
 		},
@@ -62,44 +73,44 @@ func New(withOptions ...Option) (r *RateLimiter, err error) {
 		burstLimit:      o.Burst,
 		db:              o.Database,
 	}
-	r.upsertStmt, err = r.db.Prepare(fmt.Sprintf(
-		// TODO: this upsert is easily DDOS-able, because -$4 tokens are substracted regardless of whether they are available or not.
-		// could fix it with a on-row-update trigger?
-		`
-    WITH
-    original AS (
-      SELECT tokens FROM %[1]s WHERE tag=$1
-      UNION SELECT %.6[2]f
-    ), updated AS (
-      INSERT INTO %[1]s (tag, touched, tokens)
-         VALUES($1, $2, %.6[2]f-$4)
-       ON CONFLICT (tag) DO
-         UPDATE
-          SET touched=$2, tokens=GREATEST(LEAST(
-      		  %[1]s.tokens + (($2-%[1]s.touched)::numeric*$3),
-      		  %.6[2]f
-      		)-$4, 0)
-       RETURNING %[1]s.tokens
-    )
-
-    SELECT
-      updated.tokens, updated.tokens=original.tokens
-    FROM original, updated;
-    `,
-		o.Table,
-		o.Burst,
-	))
+	// r.upsertStmt, err = r.db.Prepare(fmt.Sprintf(
+	// 	// TODO: this upsert is easily DDOS-able, because -$4 tokens are substracted regardless of whether they are available or not.
+	// 	// could fix it with a on-row-update trigger?
+	// 	`
+	//   WITH
+	//   original AS (
+	//     SELECT tokens FROM %[1]s WHERE tag=$1
+	//     UNION SELECT %.6[2]f
+	//   ), updated AS (
+	//     INSERT INTO %[1]s (tag, touched, tokens)
+	//        VALUES($1, $2, %.6[2]f-$4)
+	//      ON CONFLICT (tag) DO
+	//        UPDATE
+	//         SET touched=$2, tokens=GREATEST(LEAST(
+	//     		  %[1]s.tokens + (($2-%[1]s.touched)::numeric*$3),
+	//     		  %.6[2]f
+	//     		)-$4, 0)
+	//      RETURNING %[1]s.tokens
+	//   )
+	//
+	//   SELECT
+	//     updated.tokens, updated.tokens=original.tokens
+	//   FROM original, updated;
+	//   `,
+	// 	o.Table,
+	// 	o.Burst,
+	// ))
+	// if err != nil {
+	// 	return nil, fmt.Errorf("cannot prepare upsert statement: %w", err)
+	// }
+	r.createStmt, err = r.db.Prepare(`INSERT INTO ` + o.Table + `(tag, touched, tokens) VALUES($1, $2, $3)`)
 	if err != nil {
-		return nil, fmt.Errorf("cannot prepare upsert statement: %w", err)
+		return nil, fmt.Errorf("cannot prepare create statement: %w", err)
 	}
-	// r.createStmt, err = r.db.Prepare(`INSERT INTO ` + o.Table + `(touched, tokens, tag) VALUES($1, $2, $3)`)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("cannot prepare create statement: %w", err)
-	// }
-	// r.retrieveStmt, err = r.db.Prepare(`SELECT touched, tokens FROM ` + o.Table + ` WHERE tag=$1`)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("cannot prepare retrieve statement: %w", err)
-	// }
+	r.retrieveStmt, err = r.db.Prepare(`SELECT SUM(tokens) FROM ` + o.Table + ` WHERE tag=$1 AND touched>$2`)
+	if err != nil {
+		return nil, fmt.Errorf("cannot prepare retrieve statement: %w", err)
+	}
 	// r.updateStmt, err = r.db.Prepare(`UPDATE ` + o.Table + ` SET touched=$1, tokens=$2 WHERE tag=$3`)
 	// if err != nil {
 	// 	return nil, fmt.Errorf("cannot prepare update statement: %w", err)
@@ -146,18 +157,33 @@ func (r *RateLimiter) Take(
 	ok bool,
 	err error,
 ) {
-	row := r.upsertStmt.QueryRow(
-		tag, time.Now().UnixMicro(), r.microSecondRate, tokens)
-	if err = row.Err(); err != nil {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	t := time.Now()
+
+	create := tx.Stmt(r.createStmt)
+	_, err = create.Exec(tag, t.UnixMicro(), tokens)
+	if err != nil {
 		return 0, false, err
 	}
 
-	var updated bool
-	if err = row.Scan(&remaining, &updated); err != nil {
-		return 0, false, err
+	retrieve := tx.Stmt(r.retrieveStmt)
+	row := retrieve.QueryRow(tag, t.Add(-r.rate.Interval()).UnixMicro())
+	if err = row.Err(); err != nil {
+		return 0, false, errors.Join(err, tx.Rollback())
 	}
-	if updated {
-		return remaining, false, nil
+	if err = row.Scan(&remaining); err != nil {
+		return 0, false, errors.Join(err, tx.Rollback())
+	}
+	remaining = r.burstLimit - remaining
+	if remaining < 0 { // not enough
+		// panic("not enough")
+		return remaining, false, tx.Rollback()
+	}
+	if err = tx.Commit(); err != nil {
+		return remaining, false, errors.Join(err, tx.Rollback())
 	}
 	return remaining, true, nil
 }
