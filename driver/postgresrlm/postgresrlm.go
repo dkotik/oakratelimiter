@@ -6,7 +6,6 @@ package postgresrlm
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -17,13 +16,15 @@ import (
 
 // RateLimiter keep leaky bucket state in a Postgres database.
 type RateLimiter struct {
-	rate         *rate.Rate
-	burstLimit   float64
-	db           *sql.DB
-	createStmt   *sql.Stmt
-	retrieveStmt *sql.Stmt
-	updateStmt   *sql.Stmt
-	cleanupStmt  *sql.Stmt
+	rate            *rate.Rate
+	microSecondRate float64
+	burstLimit      float64
+	db              *sql.DB
+	// createStmt   *sql.Stmt
+	// retrieveStmt *sql.Stmt
+	// updateStmt   *sql.Stmt
+	upsertStmt  *sql.Stmt
+	cleanupStmt *sql.Stmt
 }
 
 func New(withOptions ...Option) (r *RateLimiter, err error) {
@@ -39,10 +40,9 @@ func New(withOptions ...Option) (r *RateLimiter, err error) {
 			_, err = o.Database.Exec(`
         CREATE TABLE IF NOT EXISTS
         ` + o.Table + ` (
-          tag varchar(128) NOT NULL,
+          tag varchar(128) NOT NULL PRIMARY KEY,
           touched bigint NOT NULL,
-          tokens numeric NOT NULL,
-          PRIMARY KEY(tag)
+          tokens numeric NOT NULL
         )
       `)
 			if err != nil {
@@ -57,22 +57,53 @@ func New(withOptions ...Option) (r *RateLimiter, err error) {
 	}
 
 	r = &RateLimiter{
-		rate:       o.Rate,
-		burstLimit: o.Burst,
-		db:         o.Database,
+		rate:            o.Rate,
+		microSecondRate: o.Rate.PerNanosecond() * 1000,
+		burstLimit:      o.Burst,
+		db:              o.Database,
 	}
-	r.createStmt, err = r.db.Prepare(`INSERT INTO ` + o.Table + `(touched, tokens, tag) VALUES($1, $2, $3)`)
+	r.upsertStmt, err = r.db.Prepare(fmt.Sprintf(
+		// TODO: this upsert is easily DDOS-able, because -$4 tokens are substracted regardless of whether they are available or not.
+		// could fix it with a on-row-update trigger?
+		`
+    WITH
+    original AS (
+      SELECT tokens FROM %[1]s WHERE tag=$1
+      UNION SELECT %.6[2]f
+    ), updated AS (
+      INSERT INTO %[1]s (tag, touched, tokens)
+         VALUES($1, $2, %.6[2]f-$4)
+       ON CONFLICT (tag) DO
+         UPDATE
+          SET touched=$2, tokens=GREATEST(LEAST(
+      		  %[1]s.tokens + (($2-%[1]s.touched)::numeric*$3),
+      		  %.6[2]f
+      		)-$4, 0)
+       RETURNING %[1]s.tokens
+    )
+
+    SELECT
+      updated.tokens, updated.tokens=original.tokens
+    FROM original, updated;
+    `,
+		o.Table,
+		o.Burst,
+	))
 	if err != nil {
-		return nil, fmt.Errorf("cannot prepare create statement: %w", err)
+		return nil, fmt.Errorf("cannot prepare upsert statement: %w", err)
 	}
-	r.retrieveStmt, err = r.db.Prepare(`SELECT touched, tokens FROM ` + o.Table + ` WHERE tag=$1`)
-	if err != nil {
-		return nil, fmt.Errorf("cannot prepare retrieve statement: %w", err)
-	}
-	r.updateStmt, err = r.db.Prepare(`UPDATE ` + o.Table + ` SET touched=$1, tokens=$2 WHERE tag=$3`)
-	if err != nil {
-		return nil, fmt.Errorf("cannot prepare update statement: %w", err)
-	}
+	// r.createStmt, err = r.db.Prepare(`INSERT INTO ` + o.Table + `(touched, tokens, tag) VALUES($1, $2, $3)`)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("cannot prepare create statement: %w", err)
+	// }
+	// r.retrieveStmt, err = r.db.Prepare(`SELECT touched, tokens FROM ` + o.Table + ` WHERE tag=$1`)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("cannot prepare retrieve statement: %w", err)
+	// }
+	// r.updateStmt, err = r.db.Prepare(`UPDATE ` + o.Table + ` SET touched=$1, tokens=$2 WHERE tag=$3`)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("cannot prepare update statement: %w", err)
+	// }
 	r.cleanupStmt, err = r.db.Prepare(`DELETE FROM ` + o.Table + ` WHERE touched < $1`)
 	if err != nil {
 		return nil, fmt.Errorf("cannot prepare delete statement: %w", err)
@@ -115,60 +146,18 @@ func (r *RateLimiter) Take(
 	ok bool,
 	err error,
 ) {
-	tx, err := r.db.Begin()
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, tx.Rollback())
-		}
-	}()
-
-	t := time.Now()
-	var touched int64
-	retrieve := tx.StmtContext(ctx, r.retrieveStmt)
-	row := retrieve.QueryRow(tag)
+	row := r.upsertStmt.QueryRow(
+		tag, time.Now().UnixMicro(), r.microSecondRate, tokens)
 	if err = row.Err(); err != nil {
 		return 0, false, err
 	}
-	if err = row.Scan(&touched, &remaining); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			if r.burstLimit < tokens {
-				return r.burstLimit, false, nil
-			}
-			remaining = r.burstLimit - tokens
-			_, err = tx.StmtContext(ctx, r.createStmt).Exec(
-				t.UnixMicro(),
-				remaining,
-				tag,
-			)
-			if err != nil {
-				return 0, false, err
-			}
-			if err = tx.Commit(); err != nil {
-				return 0, false, err
-			}
-			return remaining, true, nil
-		}
+
+	var updated bool
+	if err = row.Scan(&remaining, &updated); err != nil {
 		return 0, false, err
 	}
-
-	remaining += r.rate.ReplenishedTokens(time.UnixMicro(touched), t)
-	if remaining > r.burstLimit {
-		remaining = r.burstLimit
-	}
-	if remaining < tokens {
+	if updated {
 		return remaining, false, nil
-	}
-	remaining -= tokens
-	update := tx.StmtContext(ctx, r.updateStmt)
-	if _, err = update.Exec(t.UnixMicro(), remaining, tag); err != nil {
-		return 0, false, err
-	}
-
-	if err = tx.Commit(); err != nil {
-		return 0, false, err
 	}
 	return remaining, true, nil
 }
@@ -176,6 +165,5 @@ func (r *RateLimiter) Take(
 // Cleanup removes all tokens that are expired by given [time.Time].
 func (r *RateLimiter) Cleanup(ctx context.Context, at time.Time) error {
 	_, err := r.cleanupStmt.ExecContext(ctx, at.Add(-r.rate.Interval()).UnixMicro())
-	// fmt.Println("ran cleap up")
 	return err
 }

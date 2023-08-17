@@ -23,5 +23,7 @@ func TestPostgresDriver(t *testing.T) {
 		t.Fatal("cannot initialize database:", err)
 	}
 
-	test.RateLimiterTest(context.Background(), rlm, 4)(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	test.RateLimiterTest(ctx, rlm, 4)(t)
 }

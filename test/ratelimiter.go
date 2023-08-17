@@ -99,7 +99,7 @@ func RateLimiterTest(
 						// t.Log("context done")
 						return
 					default:
-						_, ok, err := r.Take(ctx, "test", 1.0)
+						remaining, ok, err := r.Take(ctx, "test", 1.0)
 						if err != nil {
 							t.Fatal(err)
 							return
@@ -109,6 +109,7 @@ func RateLimiterTest(
 						} else {
 							blocked++
 						}
+						t.Logf("%.2f tokens remaining", remaining)
 						time.Sleep(sleep)
 					}
 				}
