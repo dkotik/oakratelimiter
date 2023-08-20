@@ -28,7 +28,10 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "^1.21"
-          cache-dependency-path: "**/go.sum"
+          cache-dependency-path: |
+            go.sum
+            driver/postgresrlm/go.sum
+            driver/sqliterlm/go.sum
       - name: Checkout latest commit
         uses: actions/checkout@v3
       - name: Run tests
@@ -37,7 +40,7 @@ jobs:
           go vet ./...
       - name: Run Postgres tests
         env:
-          DATABASE_URL: postgres://postgres_user:postgres_password@localhost:5432/postgres_db
+          DATABASE_URL: postgres://postgres_user:postgres_password@localhost:5432/postgres_db?sslmode=disable
         working-directory: driver/postgresrlm
         run: |
           go test ./...
