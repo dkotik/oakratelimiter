@@ -1,5 +1,4 @@
-//go:build interactive
-
+//revive:disable:package-comments
 package main
 
 import (
@@ -13,7 +12,6 @@ import (
 	"github.com/dkotik/oakratelimiter/driver/mutexrlm"
 )
 
-// run: go run -tags=interactive test/interactive.go
 func main() {
 	l, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
@@ -21,7 +19,9 @@ func main() {
 	}
 	defer l.Close()
 
-	rl, err := mutexrlm.NewRequestLimiter(mutexrlm.WithNewRate(1, time.Second))
+	rl, err := mutexrlm.NewRequestLimiter(
+		mutexrlm.WithNewRate(1, time.Second), // once per second
+	)
 	if err != nil {
 		panic(err)
 	}

@@ -7,6 +7,10 @@ import (
 	"github.com/dkotik/oakratelimiter/driver/mutexrlm"
 	"github.com/dkotik/oakratelimiter/rate"
 	"github.com/dkotik/oakratelimiter/request"
+	"github.com/dkotik/oakratelimiter/request/tagbycontext"
+	"github.com/dkotik/oakratelimiter/request/tagbycookie"
+	"github.com/dkotik/oakratelimiter/request/tagbyheader"
+	"github.com/dkotik/oakratelimiter/request/tagbyip"
 )
 
 type options struct {
@@ -128,9 +132,11 @@ func WithRequestLimiter(name string, rl request.Limiter) Option {
 }
 
 // WithIPAddressTagger configures rate limiter to track requests based on client IP addresses.
-func WithIPAddressTagger(rl rate.Limiter) Option {
+func WithIPAddressTagger(
+	withOptions ...tagbyip.Option,
+) Option {
 	return func(o *options) (err error) {
-		requestLimiter, err := request.NewLimiter(request.NewIPAddressTagger(), rl)
+		requestLimiter, err := tagbyip.New(withOptions...)
 		if err != nil {
 			return err
 		}
@@ -141,40 +147,44 @@ func WithIPAddressTagger(rl rate.Limiter) Option {
 	}
 }
 
-func WithIPAddressRate(r *rate.Rate) Option {
-	return func(o *options) (err error) {
-		rl, err := mutexrlm.New(mutexrlm.WithRate(r))
-		if err != nil {
-			return err
-		}
-		return WithIPAddressTagger(rl)(o)
-	}
-}
-
 // WithCookieTagger configures rate limiter to track requests based on a certain cookie.
-func WithCookieTagger(name string, rl rate.Limiter) Option {
+func WithCookieTagger(withOptions ...tagbycookie.Option) Option {
 	return func(o *options) (err error) {
-		requestLimiter, err := request.NewLimiter(
-			// If [noCookieValue] is an empty string, this [Tagger] issues a [SkipTagger] sentinel value.
-			request.NewCookieTagger(name, ""),
-			rl,
-		)
+		requestLimiter, err := tagbycookie.New(withOptions...)
 		if err != nil {
 			return err
 		}
 		return WithRequestLimiter(
-			"cookie:"+name,
+			"cookie:"+requestLimiter.Name(),
 			requestLimiter,
 		)(o)
 	}
 }
 
-func WithCookieRate(name string, r *rate.Rate) Option {
+// WithHeaderTagger configures rate limiter to track requests based on a certain HTTP header.
+func WithHeaderTagger(withOptions ...tagbyheader.Option) Option {
 	return func(o *options) (err error) {
-		rl, err := mutexrlm.New(mutexrlm.WithRate(r))
+		requestLimiter, err := tagbyheader.New(withOptions...)
 		if err != nil {
 			return err
 		}
-		return WithCookieTagger(name, rl)(o)
+		return WithRequestLimiter(
+			"header:"+requestLimiter.Name(),
+			requestLimiter,
+		)(o)
+	}
+}
+
+// WithContextTagger configures rate limiter to track requests based on a certain [context.Context] value.
+func WithContextTagger(withOptions ...tagbycontext.Option) Option {
+	return func(o *options) (err error) {
+		requestLimiter, err := tagbycontext.New(withOptions...)
+		if err != nil {
+			return err
+		}
+		return WithRequestLimiter(
+			fmt.Sprintf("contextKey:%v", requestLimiter.Key()),
+			requestLimiter,
+		)(o)
 	}
 }

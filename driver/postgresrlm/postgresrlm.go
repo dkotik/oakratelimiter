@@ -6,7 +6,6 @@ package postgresrlm
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -42,20 +41,21 @@ func New(withOptions ...Option) (r *RateLimiter, err error) {
 			// if err != nil {
 			// 	return err
 			// }
-			_, err = o.Database.Exec(`
-        CREATE TABLE IF NOT EXISTS
-        ` + o.Table + ` (
+			_, err = o.Database.Exec(fmt.Sprintf(`
+        CREATE TABLE IF NOT EXISTS %q (
           tag varchar(128) NOT NULL,
           touched bigint NOT NULL,
           tokens numeric NOT NULL
-        )
-      `)
+        )`, o.Table))
 			if err != nil {
 				return fmt.Errorf("cannot create database table %q: %w", o.Table, err)
 			}
-			_, err = o.Database.Exec(`
-        CREATE INDEX IF NOT EXISTS
-         oakratelimiterTagIndexFor_` + o.Table + ` ON ` + o.Table + `(tag)`)
+			_, err = o.Database.Exec(fmt.Sprintf(
+				`CREATE INDEX IF NOT EXISTS %q ON %q(tag)`,
+				// Postgres index naming convention: {tablename}_{columnname(s)}_{suffix}
+				o.Table+"_tag_idx",
+				o.Table,
+			))
 			if err != nil {
 				return fmt.Errorf("cannot create database index for table %q: %w", o.Table, err)
 			}
@@ -103,11 +103,11 @@ func New(withOptions ...Option) (r *RateLimiter, err error) {
 	// if err != nil {
 	// 	return nil, fmt.Errorf("cannot prepare upsert statement: %w", err)
 	// }
-	r.createStmt, err = r.db.Prepare(`INSERT INTO ` + o.Table + `(tag, touched, tokens) VALUES($1, $2, $3)`)
+	r.createStmt, err = r.db.Prepare(fmt.Sprintf(`INSERT INTO %q(tag, touched, tokens) VALUES($1, $2, $3)`, o.Table))
 	if err != nil {
 		return nil, fmt.Errorf("cannot prepare create statement: %w", err)
 	}
-	r.retrieveStmt, err = r.db.Prepare(`SELECT SUM(tokens) FROM ` + o.Table + ` WHERE tag=$1 AND touched>$2`)
+	r.retrieveStmt, err = r.db.Prepare(fmt.Sprintf(`SELECT SUM(tokens) FROM %q WHERE tag=$1 AND touched>$2`, o.Table))
 	if err != nil {
 		return nil, fmt.Errorf("cannot prepare retrieve statement: %w", err)
 	}
@@ -115,7 +115,7 @@ func New(withOptions ...Option) (r *RateLimiter, err error) {
 	// if err != nil {
 	// 	return nil, fmt.Errorf("cannot prepare update statement: %w", err)
 	// }
-	r.cleanupStmt, err = r.db.Prepare(`DELETE FROM ` + o.Table + ` WHERE touched < $1`)
+	r.cleanupStmt, err = r.db.Prepare(fmt.Sprintf(`DELETE FROM %q WHERE touched < $1`, o.Table))
 	if err != nil {
 		return nil, fmt.Errorf("cannot prepare delete statement: %w", err)
 	}
@@ -158,32 +158,37 @@ func (r *RateLimiter) Take(
 	err error,
 ) {
 	tx, err := r.db.BeginTx(ctx, nil)
+	// tx, err := r.db.Begin() // does not throw "sql: transaction has already been committed or rolled back"
 	if err != nil {
 		return 0, false, err
 	}
+	defer func() {
+		if err != nil {
+			if rerr := tx.Rollback(); err != nil {
+				slog.Warn("transaction rollback failed", slog.Any("error", rerr), slog.Any("rollback_cause", err))
+			}
+		}
+	}()
 	t := time.Now()
 
-	create := tx.Stmt(r.createStmt)
-	_, err = create.Exec(tag, t.UnixMicro(), tokens)
+	_, err = tx.Stmt(r.createStmt).Exec(tag, t.UnixMicro(), tokens)
 	if err != nil {
-		return 0, false, err
+		return 0, false, fmt.Errorf("cannot create tokens: %w", err)
 	}
 
-	retrieve := tx.Stmt(r.retrieveStmt)
-	row := retrieve.QueryRow(tag, t.Add(-r.rate.Interval()).UnixMicro())
+	row := tx.Stmt(r.retrieveStmt).QueryRow(tag, t.Add(-r.rate.Interval()).UnixMicro())
 	if err = row.Err(); err != nil {
-		return 0, false, errors.Join(err, tx.Rollback())
+		return 0, false, err
 	}
 	if err = row.Scan(&remaining); err != nil {
-		return 0, false, errors.Join(err, tx.Rollback())
+		return 0, false, err
 	}
 	remaining = r.burstLimit - remaining
 	if remaining < 0 { // not enough
-		// panic("not enough")
-		return remaining, false, tx.Rollback()
+		return remaining, false, nil
 	}
 	if err = tx.Commit(); err != nil {
-		return remaining, false, errors.Join(err, tx.Rollback())
+		return remaining, false, err
 	}
 	return remaining, true, nil
 }

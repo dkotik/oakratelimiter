@@ -5,6 +5,7 @@ package rate
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"time"
 
@@ -85,5 +86,30 @@ func (r *Rate) LogValue() slog.Value {
 		slog.Float64("tokens", r.tokens),
 		slog.Duration("interval", r.interval),
 		slog.Float64("per_second", float64(time.Second.Nanoseconds())*r.tokensPerNanosecond),
+	)
+}
+
+func (r *Rate) String() string {
+	if r == nil {
+		return "<nil> rate"
+	}
+	if r.interval >= time.Hour {
+		return fmt.Sprintf(
+			"%.2f per %.2f hours",
+			r.tokens,
+			r.interval.Hours(),
+		)
+	}
+	if r.interval >= time.Minute {
+		return fmt.Sprintf(
+			"%.2f per %.2f minutes",
+			r.tokens,
+			r.interval.Minutes(),
+		)
+	}
+	return fmt.Sprintf(
+		"%.2f per %.2f seconds",
+		r.tokens,
+		r.interval.Seconds(),
 	)
 }

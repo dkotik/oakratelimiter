@@ -1,10 +1,4 @@
-# Oak Rate Limiter
-
-Flexible HTTP rate limiter with multiple backend drivers and optional timing modulation with partial obfuscation.
-
-## Usage
-
-```go
+//revive:disable:package-comments
 package main
 
 import (
@@ -15,31 +9,26 @@ import (
 	"time"
 
 	"github.com/dkotik/oakratelimiter"
-	"github.com/dkotik/oakratelimiter/driver/mutexrlm"
+	"github.com/dkotik/oakratelimiter/request/tagbyip"
 )
 
-// see more examples in the examples directory
 func main() {
-  // select random port
 	l, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		panic(err)
 	}
 	defer l.Close()
 
-	rl, err := mutexrlm.NewRequestLimiter(mutexrlm.WithNewRate(1, time.Second))
-	if err != nil {
-		panic(err)
-	}
-
 	limiter, err := oakratelimiter.New(
-		oakratelimiter.HandlerFunc( // Oak Handler
+		oakratelimiter.HandlerFunc(
 			func(w http.ResponseWriter, r *http.Request) error {
 				_, err := io.WriteString(w, "Hello World")
 				return err
 			},
 		),
-		oakratelimiter.WithRequestLimiter("global", rl),
+		oakratelimiter.WithIPAddressTagger(
+			tagbyip.WithNewRate(1, time.Second),
+		),
 	)
 	if err != nil {
 		panic(err)
@@ -48,4 +37,3 @@ func main() {
 	fmt.Printf("Listening at http://%s\n", l.Addr())
 	http.Serve(l, limiter)
 }
-```

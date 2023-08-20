@@ -26,6 +26,7 @@ type options struct {
 // Option configures the Postgres rate limiter implementation.
 type Option func(*options) error
 
+// WithDatabase provides the Postgres connection for the [RateLimiter].
 func WithDatabase(db *sql.DB) Option {
 	return func(o *options) error {
 		if db == nil {
@@ -60,6 +61,7 @@ func WithDatabaseURL(URL string) Option {
 	}
 }
 
+// WithDatabaseFromEnvironment loads [WithDatabaseURL] with value of an environment variable.
 func WithDatabaseFromEnvironment(variableName string) Option {
 	return func(o *options) (err error) {
 		if variableName == "" {
@@ -82,6 +84,7 @@ func WithDefaultDatabaseFromEnvironment() Option {
 	}
 }
 
+// WithTable specifies the name of the Postgres table that holds token information.
 func WithTable(name string) Option {
 	return func(o *options) error {
 		if !regexp.MustCompile(`^\w+$`).MatchString(name) {
@@ -95,6 +98,7 @@ func WithTable(name string) Option {
 	}
 }
 
+// WithDefaultTable sets [WithTable] to `oakratelimiter`.
 func WithDefaultTable() Option {
 	return func(o *options) error {
 		if o.Table != "" {
@@ -104,6 +108,7 @@ func WithDefaultTable() Option {
 	}
 }
 
+// WithRate specifies [rate.Rate] setting to use with this rate limiter.
 func WithRate(r *rate.Rate) Option {
 	return func(o *options) error {
 		if r == nil {
