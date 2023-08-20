@@ -1,0 +1,59 @@
+name: Automated Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+env:
+
+jobs:
+  tests_build_deploy:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_DB: postgres_db
+          POSTGRES_PASSWORD: postgres_password
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres_user
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "^1.21"
+          cache-dependency-path:
+            - go.sum
+            - driver/postgresrlm/go.sum
+            - driver/sqliterlm/go.sum
+      - name: Checkout latest commit
+        uses: actions/checkout@v3
+      - name: Run tests
+        run: |
+          go test ./...
+          go vet ./...
+      - name: Run Postgres tests
+        env:
+          DATABASE_URL: postgres://postgres_user:postgres_password@localhost:5432/postgres_db
+        working-directory: driver/postgresrlm
+        run: |
+          go test ./...
+          go vet ./...
+      - name: Run SQLite tests
+        working-directory: driver/postgresrlm
+        run: |
+          go test ./...
+          go vet ./...
+      - name: Compile examples
+        run: |
+          go test ./...
+          go vet ./...
+          go build -v ./...
