@@ -1,5 +1,7 @@
 github.com/dkotik/oakratelimiter v0.0.1 h1:pxh9PvLym7O2INE8GBPbG9iGHyDWrY1oXTmY6f1BSMQ=
 github.com/dkotik/oakratelimiter v0.0.1/go.mod h1:HM4pvYNaN9HOxzSDlPe2r6D5eOCqLGer0Pjyv2cW+b4=
+github.com/dkotik/oakratelimiter v0.0.2 h1:273kapm8CPgFnIG5HQQuuOe7Nbf3P0t4+Myx6Ev1h7Q=
+github.com/dkotik/oakratelimiter v0.0.2/go.mod h1:HM4pvYNaN9HOxzSDlPe2r6D5eOCqLGer0Pjyv2cW+b4=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=

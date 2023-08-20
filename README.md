@@ -1,5 +1,9 @@
 # Oak Rate Limiter
 
+<p>
+	<a href="https://pkg.go.dev/github.com/dkotik/oakratelimiter"><img src="https://img.shields.io/badge/godoc-reference-%23007d9c.svg"></a>
+</p>
+
 Flexible HTTP rate limiter with multiple backend drivers and optional timing modulation with partial obfuscation.
 
 ## Usage

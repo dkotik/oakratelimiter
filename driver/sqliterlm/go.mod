@@ -3,7 +3,7 @@ module github.com/dkotik/oakratelimiter/postgresrlm
 go 1.21.0
 
 require (
-	github.com/dkotik/oakratelimiter v0.0.1 // indirect
+	github.com/dkotik/oakratelimiter v0.0.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
