@@ -5,8 +5,6 @@ on:
   push:
     branches: [main]
 
-env:
-
 jobs:
   tests_build_deploy:
     runs-on: ubuntu-latest
@@ -30,10 +28,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "^1.21"
-          cache-dependency-path:
-            - go.sum
-            - driver/postgresrlm/go.sum
-            - driver/sqliterlm/go.sum
+          cache-dependency-path: "**/go.sum"
       - name: Checkout latest commit
         uses: actions/checkout@v3
       - name: Run tests
