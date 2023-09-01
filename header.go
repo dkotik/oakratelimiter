@@ -9,29 +9,35 @@ import (
 	"github.com/dkotik/oakratelimiter/rate"
 )
 
-var _ HeaderWriter = (*SilentHeaderWriter)(nil)
-var _ HeaderWriter = (*ObfuscatingHeaderWriter)(nil)
+var ( // enforce interface compliance
+	_ HeaderWriter = (*SilentHeaderWriter)(nil)
+	_ HeaderWriter = (*ObfuscatingHeaderWriter)(nil)
+)
 
+// HeaderWriter reports rate limiter state.
 type HeaderWriter interface {
 	ReportAccessAllowed(header http.Header, tokens float64)
 	ReportAccessDenied(header http.Header, tokens float64)
 	ReportError(header http.Header)
 }
 
+// SilentHeaderWriter does not write any headers.
 type SilentHeaderWriter struct{}
 
 func (s *SilentHeaderWriter) ReportAccessAllowed(http.Header, float64) {}
 func (s *SilentHeaderWriter) ReportAccessDenied(http.Header, float64)  {}
 func (s *SilentHeaderWriter) ReportError(http.Header)                  {}
 
+// ObfuscatingHeaderWriter reports the rate per second regardless of the real [rate.Rate] interval. It can report the rate different from the actual. This is done to avoid leaking the internal state of the system, which may aid the attackers in overcoming the rate limiter.
 type ObfuscatingHeaderWriter struct {
 	oneTokenWindow   time.Duration
 	displayRateLimit string
 }
 
-func NewObfuscatingHeaderWriter(r *rate.Rate) HeaderWriter {
+// NewObfuscatingHeaderWriter creates an [ObfuscatingHeaderWriter] using a given rate, which may differ from the actual rate.
+func NewObfuscatingHeaderWriter(displayRate *rate.Rate) HeaderWriter {
 	limit := uint(1)
-	perNano := r.PerNanosecond()
+	perNano := displayRate.PerNanosecond()
 	oneTokenWindow := time.Nanosecond * time.Duration(1.05/perNano)
 	if oneTokenWindow < time.Second {
 		limit = uint(math.Min(
@@ -46,6 +52,7 @@ func NewObfuscatingHeaderWriter(r *rate.Rate) HeaderWriter {
 	}
 }
 
+// ReportAccessAllowed indicates that the request was not limited.
 func (o *ObfuscatingHeaderWriter) ReportAccessAllowed(
 	h http.Header,
 	tokens float64,
@@ -60,6 +67,7 @@ func (o *ObfuscatingHeaderWriter) ReportAccessAllowed(
 	h.Set("X-RateLimit-Remaining", "1")
 }
 
+// ReportAccessDenied indicates the request was blocked due to the rate limiter.
 func (o *ObfuscatingHeaderWriter) ReportAccessDenied(
 	h http.Header,
 	tokens float64,

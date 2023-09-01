@@ -10,6 +10,7 @@ import (
 	"github.com/dkotik/oakratelimiter/request"
 )
 
+// NewRequestLimiter initializes a [request.Limiter] using [Option]s.
 func NewRequestLimiter(withOptions ...Option) (request.Limiter, error) {
 	o := &options{}
 	for _, option := range append(

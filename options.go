@@ -79,6 +79,7 @@ func (o *options) append(name string, l request.Limiter) error {
 // Option initializes an [OakRateLimiter] or [Middleware].
 type Option func(*options) error
 
+// WithHeaderWriter sets a [HeaderWriter] for [RequestHandler].
 func WithHeaderWriter(h HeaderWriter) Option {
 	return func(o *options) error {
 		if h == nil {
@@ -102,6 +103,7 @@ func WithGlobalRequestLimiter(l request.Limiter) Option {
 	}
 }
 
+// WithGlobalRateLimiter applies a blind [request.Limiter] that always takens tokens from the same tag.
 func WithGlobalRateLimiter(tag string, l rate.Limiter) Option {
 	return func(o *options) (err error) {
 		rl, err := request.NewStaticLimiter(tag, l)
@@ -112,6 +114,7 @@ func WithGlobalRateLimiter(tag string, l rate.Limiter) Option {
 	}
 }
 
+// WithGlobalRate applies a [rate.Rate] without differentiating by tag.
 func WithGlobalRate(r *rate.Rate) Option {
 	return func(o *options) (err error) {
 		rl, err := mutexrlm.NewRequestLimiter(mutexrlm.WithRate(r))
@@ -122,6 +125,7 @@ func WithGlobalRate(r *rate.Rate) Option {
 	}
 }
 
+// WithRequestLimiter adds a [request.Limiter] to the list used by [RequestHandler].
 func WithRequestLimiter(name string, rl request.Limiter) Option {
 	return func(o *options) (err error) {
 		if rl == nil {

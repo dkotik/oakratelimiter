@@ -20,6 +20,7 @@ type options struct {
 // Option configures the mutex rate limiter implementation.
 type Option func(*options) error
 
+// WithRate sets [rate.Rate] for [RateLimiter].
 func WithRate(r *rate.Rate) Option {
 	return func(o *options) error {
 		if r == nil {
@@ -33,6 +34,7 @@ func WithRate(r *rate.Rate) Option {
 	}
 }
 
+// WithNewRate creates a [rate.Rate] to pass to [WithRate] option.
 func WithNewRate(limit float64, interval time.Duration) Option {
 	return func(o *options) error {
 		rate, err := rate.New(limit, interval)
@@ -43,6 +45,7 @@ func WithNewRate(limit float64, interval time.Duration) Option {
 	}
 }
 
+// WithBurst sets the leaky bucket depth.
 func WithBurst(limit float64) Option {
 	return func(o *options) error {
 		if limit <= 0 {
@@ -56,6 +59,7 @@ func WithBurst(limit float64) Option {
 	}
 }
 
+// WithDefaultBurst applies depth using [rate.Rate] interval to pass to [WithBurst] option. Given a rate of 2 per second, the default burst will be set to 2. Given a rate of 4 per minute, the default burst will be set to 4.
 func WithDefaultBurst() Option {
 	return func(o *options) error {
 		if o.Burst != 0 {
@@ -123,6 +127,7 @@ func WithDefaultCleanupInterval() Option {
 	}
 }
 
+// WithCleanupContext provides the [context.Context] for garbage collection. When the context is cancelled, garbage collection stops.
 func WithCleanupContext(ctx context.Context) Option {
 	return func(o *options) error {
 		if ctx == nil {
@@ -136,6 +141,7 @@ func WithCleanupContext(ctx context.Context) Option {
 	}
 }
 
+// WithDefaultCleanupContext passes [context.Background] to [WithCleanupContext] option.
 func WithDefaultCleanupContext() Option {
 	return func(o *options) error {
 		if o.CleanupContext != nil {

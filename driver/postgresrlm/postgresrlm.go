@@ -6,6 +6,7 @@ package postgresrlm
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -145,6 +146,28 @@ func New(withOptions ...Option) (r *RateLimiter, err error) {
 
 func (r *RateLimiter) Rate() *rate.Rate {
 	return r.rate
+}
+
+// Remaining retrieves available tokens by tag. If the record cannot be found, the burst limit is returned.
+func (r *RateLimiter) Remaining(
+	ctx context.Context,
+	tag string,
+) (
+	remaining float64,
+	err error,
+) {
+	t := time.Now()
+	row := r.retrieveStmt.QueryRow(tag, t.Add(-r.rate.Interval()).UnixMicro())
+	if err = row.Err(); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return r.burstLimit, nil
+		}
+		return 0, err
+	}
+	if err = row.Scan(&remaining); err != nil {
+		return 0, err
+	}
+	return remaining, nil
 }
 
 // Take retrieves available tokens by tag and takes one token from it.

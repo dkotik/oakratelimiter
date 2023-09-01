@@ -11,6 +11,7 @@ import (
 )
 
 type Error interface {
+	error
 	HyperTextStatusCode() int
 }
 
@@ -37,7 +38,7 @@ func (e *TooManyRequestsError) Error() string {
 }
 
 // HTTPStatusCode presents a standard HTTP status code.
-func (e *TooManyRequestsError) HTTPStatusCode() int {
+func (e *TooManyRequestsError) HyperTextStatusCode() int {
 	return http.StatusTooManyRequests
 }
 
@@ -49,6 +50,7 @@ func (e *TooManyRequestsError) LogValue() slog.Value {
 	)
 }
 
+// New initializes a [RequestHandler] using a list of [Option]s.
 func New(next Handler, withOptions ...Option) (*RequestHandler, error) {
 	o, err := newOptions(withOptions)
 	if err != nil {
@@ -63,6 +65,7 @@ func New(next Handler, withOptions ...Option) (*RequestHandler, error) {
 	}, nil
 }
 
+// NewMiddleware creates a [Middleware] that wraps [Handler]s into a [RequestHandler].
 func NewMiddleware(withOptions ...Option) (Middleware, error) {
 	o, err := newOptions(withOptions)
 	if err != nil {

@@ -1,5 +1,5 @@
 /*
-Package mutexrlm provides [rate.Limiter]s that use memory stores with [sync.Mutex] for safe concurrency. This strategy is optimal for simple single-instance rate limiting.
+Package mutexrlm provides [rate.Limiter]s that use memory stores with [sync.Mutex] for safe concurrency. This strategy is optimal for simple single-instance rate limiting. Use multiple [RateLimiter]s on endpoints to avoid lock contention when dealing with large traffic volume.
 */
 package mutexrlm
 
@@ -12,6 +12,7 @@ import (
 	"github.com/dkotik/oakratelimiter/rate"
 )
 
+// New initializes a [RateLimiter] using a list of [Option]s.
 func New(withOptions ...Option) (*RateLimiter, error) {
 	o := &options{}
 	for _, option := range append(
@@ -63,6 +64,25 @@ type RateLimiter struct {
 
 func (r *RateLimiter) Rate() *rate.Rate {
 	return r.rate
+}
+
+// Remaining locates the proper [rate.LeakyBucket] by tag returns the number of tokens still in it. If the bucket does not exist, returns the burst limit.
+func (r *RateLimiter) Remaining(
+	ctx context.Context,
+	tag string,
+) (
+	remaining float64,
+	err error,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	foundBucket, ok := r.buckets[tag]
+	if !ok {
+		return r.burstLimit, nil
+	}
+	foundBucket.Refill(time.Now(), r.rate, r.burstLimit)
+	return foundBucket.Remaining(), nil
 }
 
 // Take locates the proper [rate.LeakyBucket] by tag and takes one token from it. If the bucket does not exist, a new one is added to the internal map.

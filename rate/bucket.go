@@ -15,10 +15,12 @@ func NewLeakyBucket(at time.Time, r *Rate, burstLimit float64) *LeakyBucket {
 	return b
 }
 
+// Touched returns the last time the bucket was updated.
 func (l *LeakyBucket) Touched() time.Time {
 	return l.touched
 }
 
+// Refill calculates and returns tokens since last update to given time at a [Rate]. Restored tokens will not exceed the burst limit.
 func (l *LeakyBucket) Refill(at time.Time, r *Rate, burstLimit float64) {
 	if l.tokens < burstLimit {
 		l.tokens = l.tokens + r.ReplenishedTokens(l.touched, at)
@@ -29,6 +31,12 @@ func (l *LeakyBucket) Refill(at time.Time, r *Rate, burstLimit float64) {
 	}
 }
 
+// Remaining returns the number of tokens in the bucket. Use only after running [LeakyBucket.Refill].
+func (l *LeakyBucket) Remaining() float64 {
+	return l.tokens
+}
+
+// Take removes tokens from the bucket, if that many are available. Use only after running [LeakyBucket.Refill].
 func (l *LeakyBucket) Take(tokens float64) (remaining float64, ok bool) {
 	if l.tokens < tokens {
 		return l.tokens, false

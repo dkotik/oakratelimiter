@@ -11,6 +11,10 @@ type TagFilter func(tag string) bool
 // Limiter contrains the number of consumed tokens to a certain [Rate].
 type Limiter interface {
 	Rate() *Rate
+	Remaining(
+		ctx context.Context,
+		tag string,
+	) (float64, error)
 	Take(
 		ctx context.Context,
 		tag string,
@@ -22,11 +26,13 @@ type Limiter interface {
 	)
 }
 
+// BypassLimiter uses a [TagFilter] to selectively apply a [Limiter].
 type BypassLimiter struct {
 	Limiter
 	filter TagFilter
 }
 
+// NewBypassLimiter attaches a [TagFilter] to a [Limiter].
 func NewBypassLimiter(next Limiter, filter TagFilter) (Limiter, error) {
 	if next == nil {
 		return nil, errors.New("cannot use a <nil> next limiter")
@@ -40,6 +46,7 @@ func NewBypassLimiter(next Limiter, filter TagFilter) (Limiter, error) {
 	}, nil
 }
 
+// NewListBypassLimiter creates a [BypassLimiter] that never limits request tags from a given list.
 func NewListBypassLimiter(next Limiter, skipTags ...string) (Limiter, error) {
 	if len(skipTags) == 0 {
 		return nil, errors.New("cannot use an empty skip list")
@@ -58,6 +65,7 @@ func NewListBypassLimiter(next Limiter, skipTags ...string) (Limiter, error) {
 	return l, nil
 }
 
+// Take consumes tokens, if they are available.
 func (b *BypassLimiter) Take(
 	ctx context.Context,
 	tag string,
@@ -68,7 +76,11 @@ func (b *BypassLimiter) Take(
 	err error,
 ) {
 	if !b.filter(tag) {
-		return tokens, true, nil // drop
+		remaining, err = b.Limiter.Remaining(ctx, tag)
+		if err != nil {
+			return 0, false, err
+		}
+		return remaining, true, nil // skip tag
 	}
 	return b.Limiter.Take(ctx, tag, tokens)
 }

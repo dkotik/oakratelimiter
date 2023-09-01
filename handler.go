@@ -10,6 +10,7 @@ import (
 	"github.com/dkotik/oakratelimiter/request"
 )
 
+// RequestHandler applies a set of [request.Limiter]s to an [http.Request].
 type RequestHandler struct {
 	next            Handler
 	headerWriter    HeaderWriter
@@ -17,6 +18,7 @@ type RequestHandler struct {
 	requestLimiters []request.Limiter
 }
 
+// ServeHyperText satisfies an improved [http.Handler] interface.
 func (rh *RequestHandler) ServeHyperText(
 	w http.ResponseWriter, r *http.Request,
 ) (err error) {
@@ -48,6 +50,7 @@ func (rh *RequestHandler) ServeHyperText(
 	return rh.next.ServeHyperText(w, r)
 }
 
+// ServeHTTP satisfies [http.Handler] for compatibility with the standard library.
 func (rh *RequestHandler) ServeHTTP(
 	w http.ResponseWriter, r *http.Request,
 ) {
@@ -58,12 +61,14 @@ func (rh *RequestHandler) ServeHTTP(
 	var httpError Error
 	if errors.As(err, &httpError) {
 		msg := err.Error()
-		http.Error(w, msg, httpError.HyperTextStatusCode())
+		code := httpError.HyperTextStatusCode()
+		http.Error(w, msg, code)
 		slog.Log(
 			r.Context(),
 			slog.LevelWarn,
 			msg,
 			slog.Any("error", err),
+			slog.Int("code", code),
 		)
 		return
 	}
