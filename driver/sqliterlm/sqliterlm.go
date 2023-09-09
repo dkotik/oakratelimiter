@@ -30,7 +30,7 @@ func New(withOptions ...Option) (r *RateLimiter, err error) {
 	for _, option := range append(
 		withOptions,
 		WithDefaultTable(),
-		WithDefaultDatabaseFromEnvironment(),
+		WithDefaultEphemeralDatabase(),
 		WithDefaultBurst(),
 		WithDefaultCleanupInterval(),
 		WithDefaultCleanupContext(),

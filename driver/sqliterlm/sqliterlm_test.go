@@ -10,15 +10,14 @@ import (
 
 func TestPostgresDriver(t *testing.T) {
 	rlm, err := New(
-		WithDatabaseURL(":memory:?cache=shared&mode=rwc"),
+		// WithDatabaseURL(":memory:?cache=shared&mode=rwc"),
+		// WithTemporaryFile(),
 		WithNewRate(5, time.Second),
 		WithCleanupInterval(time.Minute),
 	)
 	if err != nil {
 		t.Fatal("cannot initialize database:", err)
 	}
-
-	// time.Sleep(time.Second * 3)
 
 	// ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	// defer cancel()

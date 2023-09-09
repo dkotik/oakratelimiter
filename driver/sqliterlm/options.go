@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -68,7 +69,28 @@ func WithDatabaseURL(URL string) Option {
 }
 
 func WithFile(path string) Option {
+	fmt.Println(path)
+	slog.Debug("rate limiter is using an SQLite3 file", slog.String("path", path))
 	return WithDatabaseURL(path)
+}
+
+func WithTemporaryFile() Option {
+	// if cleanUp == nil {
+	// 	cleanUp = context.Background()
+	// }
+	p := filepath.Join(os.TempDir(), "oakratelimiter.sqlite3")
+	// go func(ctx context.Context, p string) {
+	// 	<-ctx.Done()
+	// 	err := ctx.Err()
+	// 	if err != nil && !errors.Is(err, context.Canceled) {
+	// 		slog.WarnContext(ctx, "clean up context exited with an error", slog.Any("error", err))
+	// 	}
+	// 	if err = os.Remove(p); err != nil {
+	// 		slog.WarnContext(ctx, "failed to clean up temporary file", slog.String("path", p), slog.Any("error", err))
+	// 	}
+	// 	fmt.Println("deleted", p)
+	// }(cleanUp, p)
+	return WithFile(p) // "?cache=shared&mode=rwc"
 }
 
 // WithDatabaseFromEnvironment loads [WithDatabaseURL] with value of an environment variable.
@@ -84,13 +106,13 @@ func WithDatabaseFromEnvironment(variableName string) Option {
 	}
 }
 
-// WithDefaultDatabaseFromEnvironment connects using `DATABASE_URL` environment variable, if no database was provided by another option.
-func WithDefaultDatabaseFromEnvironment() Option {
+// WithDefaultEphemeralDatabase creates ephemeral RAM database, if no database was provided by another option.
+func WithDefaultEphemeralDatabase() Option {
 	return func(o *options) (err error) {
 		if o.Database != nil {
 			return nil // already set
 		}
-		return WithDatabaseFromEnvironment("DATABASE_URL")(o)
+		return WithDatabaseURL(":memory:?cache=shared&mode=rwc")(o)
 	}
 }
 
