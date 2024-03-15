@@ -68,12 +68,14 @@ func WithDatabaseURL(URL string) Option {
 	}
 }
 
+// WithFile persists rate limiting counters inside a file at the specified path.
 func WithFile(path string) Option {
-	fmt.Println(path)
+	// fmt.Println(path)
 	slog.Debug("rate limiter is using an SQLite3 file", slog.String("path", path))
 	return WithDatabaseURL(path)
 }
 
+// WithTemporaryFile uses a `oakratelimiter.sqlite3` file inside the system temporary directory. The responsibility for the cleaned up is entrusted to the operating system.
 func WithTemporaryFile() Option {
 	// if cleanUp == nil {
 	// 	cleanUp = context.Background()
@@ -154,6 +156,7 @@ func WithRate(r *rate.Rate) Option {
 	}
 }
 
+// WithNewRate applies a new [rate.Rate].
 func WithNewRate(limit float64, interval time.Duration) Option {
 	return func(o *options) error {
 		rate, err := rate.New(limit, interval)
@@ -164,6 +167,7 @@ func WithNewRate(limit float64, interval time.Duration) Option {
 	}
 }
 
+// WithBurst overrides the default [rate.Rate] burst.
 func WithBurst(limit float64) Option {
 	return func(o *options) error {
 		if limit <= 0 {
@@ -177,6 +181,29 @@ func WithBurst(limit float64) Option {
 	}
 }
 
+// WithDoubleBurst doubles the maximum number of tokens that was last set. Repeat this option to double again.
+func WithDoubleBurst() Option {
+	return func(o *options) (err error) {
+		if err = WithDefaultBurst()(o); err != nil {
+			return err
+			o.Burst = o.Burst * 2
+			return nil
+		}
+	}
+}
+
+// WithTripleBurst triples the maximum number of tokens that was last set. Repeat this option to double again.
+func WithTripleBurst() Option {
+	return func(o *options) (err error) {
+		if err = WithDefaultBurst()(o); err != nil {
+			return err
+			o.Burst = o.Burst * 3
+			return nil
+		}
+	}
+}
+
+// WithDefaultBurst calculates default burst value by counting the maximum number of tokens that can regenerate during the rate interval.
 func WithDefaultBurst() Option {
 	return func(o *options) error {
 		if o.Burst != 0 {
@@ -217,6 +244,7 @@ func WithDefaultCleanupInterval() Option {
 	}
 }
 
+// WithCleanupContext controls record clean up cycle. When this context is cancelled, the clean up cycle stops.
 func WithCleanupContext(ctx context.Context) Option {
 	return func(o *options) error {
 		if ctx == nil {
@@ -230,6 +258,7 @@ func WithCleanupContext(ctx context.Context) Option {
 	}
 }
 
+// WithDefaultCleanupContext sets clean up context to [context.Background].
 func WithDefaultCleanupContext() Option {
 	return func(o *options) error {
 		if o.CleanupContext != nil {

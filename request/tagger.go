@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+// TODO: note that request taggers were tricked in other libraries with double values for X-Forwarded header: use Header.Values(string) []string
+
 // Tagger associates tags to [http.Request]s in order to
 // group related requests for a discriminating rate limiter.
 // Requests with the same association tag will be tracked
