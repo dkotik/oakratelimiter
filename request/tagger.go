@@ -5,7 +5,24 @@ import (
 	"net/http"
 )
 
-// TODO: note that request taggers were tricked in other libraries with double values for X-Forwarded header: use Header.Values(string) []string
+// TODO: note that request taggers were tricked in other libraries with double values for X-Forwarded header: use Header.Values(string) []string to overcome, see example below.
+
+/*
+Account Takeover Via Rate-Limit Bypass
+
+When a password reset was initiated, users were required to enter a six-digit numeric code sent to their email for verification.
+
+To prevent brute force attacks, the application implemented rate-limit protection, restricting the number of requests users could make within a specific timeframe. If this limit was surpassed, the system issued a 429 Too Many Requests error message.
+
+However, the rate-limit protection was bypassed by adding two X-Forwarded-For: IP headers:
+
+    X-Forwarded-For: 1.1.1.1
+    X-Forwarded-For: 2.2.2.2
+
+By replacing the IP address in the second X-Forwarded-For header, it became possible to bypass the rate-limit and try multiple codes until the correct one was found.
+
+Exploiting this vulnerability allowed for the unauthorized takeover of any account within the application.
+*/
 
 // Tagger associates tags to [http.Request]s in order to
 // group related requests for a discriminating rate limiter.
