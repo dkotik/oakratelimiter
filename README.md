@@ -70,10 +70,31 @@ Taggers differentiate requests based on a property. Each can be combined with a 
 - [x] By IP address: `tagbyip.New`
 - [x] By Header: `tagbyheader.New`
   - [x] Supports optional `WithNoHeaderLimiter`
+  - [ ] Detection of similar headers from common header set:
+      - X-Originating-IP
+      - X-Forwarded-For
+      - X-Forwarded-Host
+      - X-Remote-IP
+      - X-Remote-Addr
+      - X-Client-IP
+      - X-Host
 - [x] By Cookie: `tagbycookie.New`
   - [x] Supports optional `WithNoCookieLimiter`
 - [x] By Context Value: `tagbycontext.New`
   - [x] Supports optional `WithNoValueLimiter`
+- [ ] Ensured protection against double HTTP headers:
+  ```
+  X-Forwarded-For:
+  X-Forwarded-For: 127.0.0.1
+  ```
+- [ ] Ensured protection against null bytes at the end of URL or headers:
+  - [ ] %00
+  - [ ] %0d
+  - [ ] %0a
+  - [ ] %0d%0a
+  - [ ] %09
+  - [ ] %0c
+  - [ ] %20
 
 ## Timing Modulation
 
